@@ -39,12 +39,13 @@ func CreateTasks(content *gin.Context) {
 		content.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
-
+	user, _ := content.MustGet("currentUser").(models.User)
 	task := models.Task{
 		Title:       input.Title,
 		Description: input.Description,
 		Status:      models.StatusPending,
 		DueDate:     input.DueDate,
+		UserID:      user.ID,
 	}
 	if err := db.DB.Create(&task).Error; err != nil {
 		content.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
@@ -55,16 +56,22 @@ func CreateTasks(content *gin.Context) {
 
 func GetTask(content *gin.Context) {
 	var task models.Task
-	if err := db.DB.First(&task, content.Param("id")).Error; err != nil {
+	user, _ := content.MustGet("currentUser").(models.User)
+	if err := db.DB.Where("user_id = ?", user.ID).First(&task, content.Param("id")).Error; err != nil {
 		content.JSON(http.StatusNotFound, gin.H{"error": "task not found"})
 		return
 	}
 	content.JSON(http.StatusOK, gin.H{"data": task})
+	if task.UserID != user.ID {
+		content.JSON(http.StatusForbidden, gin.H{"error": "you don't have access to this task"})
+		return
+	}
 }
 
 func UpdateTask(content *gin.Context) {
 	var task models.Task
-	if err := db.DB.First(&task, content.Param("id")).Error; err != nil {
+	user, _ := content.MustGet("currentUser").(models.User)
+	if err := db.DB.Where("user_id = ?", user.ID).First(&task, content.Param("id")).Error; err != nil {
 		content.JSON(http.StatusNotFound, gin.H{"error": "task not found"})
 		return
 	}
@@ -85,21 +92,31 @@ func UpdateTask(content *gin.Context) {
 		return
 	}
 	content.JSON(http.StatusOK, gin.H{"data": task})
+	if task.UserID != user.ID {
+		content.JSON(http.StatusForbidden, gin.H{"error": "you don't have access to this task"})
+		return
+	}
 }
 
 func DeleteTask(content *gin.Context) {
 	var task models.Task
-	if err := db.DB.First(&task, content.Param("id")).Error; err != nil {
+	user, _ := content.MustGet("currentUser").(models.User)
+	if err := db.DB.Where("user_id = ?", user.ID).First(&task, content.Param("id")).Error; err != nil {
 		content.JSON(http.StatusNotFound, gin.H{"error": "task not found"})
 		return
 	}
 	db.DB.Delete(&task)
 	content.JSON(http.StatusOK, gin.H{"data": task})
+		if task.UserID != user.ID {
+		content.JSON(http.StatusForbidden, gin.H{"error": "you don't have access to this task"})
+		return
+	}
 }
 
 func PatchTask(content *gin.Context) {
 	var task models.Task
-	if err := db.DB.First(&task, content.Param("id")).Error; err != nil {
+	user, _ := content.MustGet("currentUser").(models.User)
+	if err := db.DB.Where("user_id = ?", user.ID).First(&task, content.Param("id")).Error; err != nil {
 		content.JSON(http.StatusNotFound, gin.H{"error": "task not found"})
 		return
 	}
@@ -129,5 +146,8 @@ func PatchTask(content *gin.Context) {
 		return
 	}
 	content.JSON(http.StatusOK, gin.H{"data": task})
-
+	if task.UserID != user.ID {
+		content.JSON(http.StatusForbidden, gin.H{"error": "you don't have access to this task"})
+		return
+	}
 }

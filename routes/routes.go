@@ -2,6 +2,7 @@ package routes
 
 import (
 	"todoList/handlers"
+	"todoList/middleware"
 
 	"github.com/gin-gonic/gin"
 )
@@ -9,7 +10,11 @@ import (
 func SetupRoutes(route *gin.Engine) {
 	api := route.Group("/api/v1")
 	{
+		api.POST("/register", handlers.RegisterUser)
+		api.POST("/login", handlers.LoginUser)
+	}
 		tasks := api.Group("/tasks")
+		tasks.Use(middleware.RequireAuth)
 		{
 			tasks.GET("", handlers.GetTasks)
 			tasks.POST("", handlers.CreateTasks)
@@ -18,5 +23,5 @@ func SetupRoutes(route *gin.Engine) {
 			tasks.DELETE("/:id", handlers.DeleteTask)
 			tasks.PATCH("/:id", handlers.PatchTask)
 		}
-	}
 }
+
