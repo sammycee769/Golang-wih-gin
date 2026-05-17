@@ -2,42 +2,25 @@ package handlers
 
 import (
 	"net/http"
-	"strconv"
-	"sync"
-	"time"
+	"todoList/db"
 	"todoList/models"
 
 	"github.com/gin-gonic/gin"
 )
 
-var (
-	tasks  []models.Task
-	nextID uint = 1
-	mu     sync.Mutex
-)
-
 func GetTasks(content *gin.Context) {
-	statusQuery := content.Query("status")
+	var tasks []models.Task
 
-	mu.Lock()
-	defer mu.Unlock()
+	query := db.DB.Model(&models.Task{})
+	if status := content.Query("status"); status != "" {
+		query = query.Where("status = ?", status)
+	}
 
-	if statusQuery != "" && !isValidStatus(models.Status(statusQuery)) {
-		content.JSON(http.StatusBadRequest, gin.H{"error": "invalid status"})
+	if err := query.Find(&tasks).Error; err != nil {
+		content.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
-
-	if statusQuery == "" {
-		content.JSON(http.StatusOK, gin.H{"data": tasks})
-		return
-	}
-	var filteredTasks []models.Task
-	for _, task := range tasks {
-		if string(task.Status) == statusQuery {
-			filteredTasks = append(filteredTasks, task)
-		}
-	}
-	content.JSON(http.StatusOK, gin.H{"data": filteredTasks})
+	content.JSON(http.StatusOK, gin.H{"data": tasks})
 }
 func isValidStatus(status models.Status) bool {
 	switch status {
@@ -56,90 +39,95 @@ func CreateTasks(content *gin.Context) {
 		content.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
-	mu.Lock()
-	defer mu.Unlock()
 
-	newTask := models.Task{
-		ID:          nextID,
+	task := models.Task{
 		Title:       input.Title,
 		Description: input.Description,
 		Status:      models.StatusPending,
-		CreatedAt:   time.Now(),
+		DueDate:     input.DueDate,
 	}
-	nextID++
-	tasks = append(tasks, newTask)
-	content.JSON(http.StatusCreated, gin.H{"data": tasks})
+	if err := db.DB.Create(&task).Error; err != nil {
+		content.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	content.JSON(http.StatusCreated, gin.H{"data": task})
 }
 
 func GetTask(content *gin.Context) {
-	idStr := content.Param("id")
-	id, err := strconv.ParseUint(idStr, 10, 64)
-	if err != nil {
-		content.JSON(http.StatusBadRequest, gin.H{"error": "invalid id"})
+	var task models.Task
+	if err := db.DB.First(&task, content.Param("id")).Error; err != nil {
+		content.JSON(http.StatusNotFound, gin.H{"error": "task not found"})
 		return
 	}
-	mu.Lock()
-	defer mu.Unlock()
-	for _, task := range tasks {
-		if task.ID == uint(id) {
-			content.JSON(http.StatusOK, gin.H{"data": task})
-			return
-		}
-	}
-	content.JSON(http.StatusNotFound, gin.H{"error": "not found"})
+	content.JSON(http.StatusOK, gin.H{"data": task})
 }
 
 func UpdateTask(content *gin.Context) {
-	idStr := content.Param("id")
-	id, err := strconv.ParseUint(idStr, 10, 64)
-	if err != nil {
-		content.JSON(http.StatusBadRequest, gin.H{"error": "invalid id"})
+	var task models.Task
+	if err := db.DB.First(&task, content.Param("id")).Error; err != nil {
+		content.JSON(http.StatusNotFound, gin.H{"error": "task not found"})
 		return
 	}
 	var input models.UpdateTaskInput
 	if err := content.ShouldBindJSON(&input); err != nil {
-		content.JSON(http.StatusBadRequest, gin.H{"error": "invalid id"})
+		content.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
-	mu.Lock()
-	defer mu.Unlock()
-
-	for count, task := range tasks {
-		if task.ID == uint(id) {
-			if input.Title != nil {
-				tasks[count].Title = *input.Title
-			}
-			if input.Description != nil {
-				tasks[count].Description = *input.Description
-			}
-			if input.Status != nil {
-				tasks[count].Status = *input.Status
-			}
-			tasks[count].UpdatedAt = time.Now()
-			content.JSON(http.StatusOK, gin.H{"data": tasks[count]})
+	if input.Status != nil {
+		if !isValidStatus(*input.Status) {
+			content.JSON(http.StatusBadRequest, gin.H{"error": "invalid status"})
 			return
 		}
 	}
-	content.JSON(http.StatusNotFound, gin.H{"error": "not found"})
+
+	if err := db.DB.Model(&task).Updates(input).Error; err != nil {
+		content.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	content.JSON(http.StatusOK, gin.H{"data": task})
 }
 
 func DeleteTask(content *gin.Context) {
-	idStr := content.Param("id")
-	id, err := strconv.ParseUint(idStr, 10, 64)
-	if err != nil {
-		content.JSON(http.StatusBadRequest, gin.H{"error": "invalid id"})
+	var task models.Task
+	if err := db.DB.First(&task, content.Param("id")).Error; err != nil {
+		content.JSON(http.StatusNotFound, gin.H{"error": "task not found"})
 		return
 	}
-	mu.Lock()
-	defer mu.Unlock()
+	db.DB.Delete(&task)
+	content.JSON(http.StatusOK, gin.H{"data": task})
+}
 
-	for count, task := range tasks {
-		if task.ID == uint(id) {
-			tasks = append(tasks[:count], tasks[count+1:]...)
-			content.Status(http.StatusNoContent)
+func PatchTask(content *gin.Context) {
+	var task models.Task
+	if err := db.DB.First(&task, content.Param("id")).Error; err != nil {
+		content.JSON(http.StatusNotFound, gin.H{"error": "task not found"})
+		return
+	}
+	var input models.UpdateTaskInput
+	if err := content.ShouldBindJSON(&input); err != nil {
+		content.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	if input.Title != nil {
+		task.Title = *input.Title
+	}
+	if input.Description != nil {
+		task.Description = *input.Description
+	}
+	if input.DueDate != nil {
+		task.DueDate = input.DueDate
+	}
+	if input.Status != nil {
+		if !isValidStatus(*input.Status) {
+			content.JSON(http.StatusBadRequest, gin.H{"error": "invalid status"})
 			return
 		}
+		task.Status = *input.Status
 	}
-	content.JSON(http.StatusNotFound, gin.H{"error": "not found"})
+	if err := db.DB.Save(&task).Error; err != nil {
+		content.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	content.JSON(http.StatusOK, gin.H{"data": task})
 
 }

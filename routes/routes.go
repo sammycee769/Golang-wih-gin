@@ -16,6 +16,7 @@ func SetupRoutes(route *gin.Engine) {
 			tasks.GET("/:id", handlers.GetTask)
 			tasks.PUT("/:id", handlers.UpdateTask)
 			tasks.DELETE("/:id", handlers.DeleteTask)
+			tasks.PATCH("/:id", handlers.PatchTask)
 		}
 	}
 }

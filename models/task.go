@@ -1,6 +1,10 @@
 package models
 
-import "time"
+import (
+	"time"
+
+	"gorm.io/gorm"
+)
 
 type Status string
 
@@ -11,21 +15,29 @@ const (
 )
 
 type Task struct {
-	ID          uint      `json:"id"`
-	Title       string    `json:"title"`
-	Description string    `json:"description"`
-	Status      Status    `json:"status"`
-	CreatedAt   time.Time `json:"created_at"`
-	UpdatedAt   time.Time `json:"updated_at"`
+	gorm.Model
+	Title       string     `json:"title"`
+	Description string     `json:"description"`
+	Status      Status     `json:"status"`
+	DueDate     *time.Time `json:"due_date"`
 }
 
 type CreateTaskInput struct {
-	Title       string `json:"title" binding:"required"`
-	Description string `json:"description"`
+	Title       string     `json:"title" binding:"required"`
+	Description string     `json:"description"`
+	DueDate     *time.Time `json:"due_date"`
 }
 
 type UpdateTaskInput struct {
-	Title       *string `json:"title"`
-	Description *string `json:"description"`
-	Status      *Status `json:"status"`
+	Title       *string    `json:"title"`
+	Description *string    `json:"description"`
+	Status      *Status    `json:"status"`
+	DueDate     *time.Time `json:"due_date"`
+}
+
+type PatchTaskRequest struct {
+	Title       *string    `json:"title"`
+	Description *string    `json:"description"`
+	Status      *Status    `json:"status"`
+	DueDate     *time.Time `json:"due_date"`
 }
